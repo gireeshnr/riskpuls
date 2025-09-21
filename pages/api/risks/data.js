@@ -1,17 +1,15 @@
-let risks = [];
+/*
+ * Helper functions for the risk API.
+ * Only the calculateScore function is exported, as persistence is now handled
+ * directly with MongoDB via the API routes. If you need additional helpers
+ * in the future (e.g. to normalise data across different frameworks), they
+ * can be added here.
+ */
 
-export function getRisks() {
-  return risks;
+// Compute the risk score by multiplying likelihood and impact. Both inputs may
+// be strings or numbers; they are coerced to numbers before calculation.
+function calculateScore(likelihood, impact) {
+  return Number(likelihood) * Number(impact);
 }
 
-export function addRisk(risk) {
-  risks.push(risk);
-}
-
-export function updateRisk(id, updatedRisk) {
-  risks = risks.map((r) => (r.id === id ? { ...r, ...updatedRisk } : r));
-}
-
-export function deleteRisk(id) {
-  risks = risks.filter((r) => r.id !== id);
-}
+export { calculateScore };
