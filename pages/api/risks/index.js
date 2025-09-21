@@ -1,22 +1,34 @@
-import { getRisks, addRisk } from './data';
+import clientPromise fro'../../../lib/mongo'
+import { calculateScore } from './data';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
+  const client = await clientPromise;
+  conclient.db();
+  const collection = db.collection('risks');
+
   if (req.method === 'GET') {
-    const risks = getRisks();
+    const docs = await collection.find({}).toArray();
+    const risks = docs.map(({ _id, ...rest }) => ({
+      id: _id.toString(),
+      ...rest,
+    }));
     return res.status(200).json(risks);
   } else if (req.method === 'POST') {
     const { title, description, likelihood, impact } = req.body;
-    const id = Date.now().toString();
+    if (!title || !description || likelihood == null || impact == null) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
     const risk = {
-      id,
       title,
       description,
       likelihood: Number(likelihood),
       impact: Number(impact),
-      risk_score: Number(likelihood) * Number(impact),
+      risk_score: calculateScore(likelihood, impact),
+      created_at: new Date(),
+      updated_at: new Date(),
     };
-    addRisk(risk);
-    return res.status(201).json(risk);
+    const result = await collection.insertOne(risk);
+    return res.status(201).json({ id: result.insertedId.toString(), ...risk });
   } else {
     res.setHeader('Allow', ['GET', 'POST']);
     return res.status(405).end(`Method ${req.method} Not Allowed`);
