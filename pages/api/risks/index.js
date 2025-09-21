@@ -1,36 +1,49 @@
-import clientPromise fro'../../../lib/mongo'
+import clientPromise from '../../../lib/mongo';
+import { ObjectId } from 'mongodb';
 import { calculateScore } from './data';
 
 export default async function handler(req, res) {
+  // Establish a MongoDB client connection
   const client = await clientPromise;
-  conclient.db();
+  const db = client.db();
   const collection = db.collection('risks');
 
   if (req.method === 'GET') {
+    // Fetch all risk documents from MongoDB
     const docs = await collection.find({}).toArray();
-    const risks = docs.map(({ _id, ...rest }) => ({
-      id: _id.toString(),
-      ...rest,
-    }));
-    return res.status(200).json(risks);
-  } else if (req.method === 'POST') {
-    const { title, description, likelihood, impact } = req.body;
-    if (!title || !description || likelihood == null || impact == null) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
-    const risk = {
-      title,
-      description,
-      likelihood: Number(likelihood),
-      impact: Number(impact),
-      risk_score: calculateScore(likelihood, impact),
-      created_at: new Date(),
-      updated_at: new Date(),
-    };
-    const result = await collection.insertOne(risk);
-    return res.status(201).json({ id: result.insertedId.toString(), ...risk });
-  } else {
-    res.setHeader('Allow', ['GET', 'POST']);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    // Map _id to id and remove _id for cleaner API responses
+    const risks = docs.map((doc) => {
+      const { _id, ...rest } = doc;
+      return { id: _id.toString(), ...rest };
+    });
+    return res.status(200).json({ risks });
   }
+
+  if (req.method === 'POST') {
+    try {
+      const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const { title, description, likelihood, impact, status = 'open', frameworks = [] } = data;
+      if (!title || !description || likelihood === undefined || impact === undefined) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+      const newRisk = {
+        title,
+        description,
+        likelihood: Number(likelihood),
+        impact: Number(impact),
+        risk_score: calculateScore(likelihood, impact),
+        status,
+        frameworks,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const result = await collection.insertOne(newRisk);
+      return res.status(201).json({ id: result.insertedId.toString(), ...newRisk });
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid JSON payload' });
+    }
+  }
+  // Method not allowed
+  res.setHeader('Allow', ['GET', 'POST']);
+  return res.status(405).json({ message: `Method ${req.method} not allowed` });
 }
