@@ -1,3 +1,4 @@
+import Header from "../../components/Header"; // adjust path per file
 import { useState, useEffect } from 'react';
 
 export default function Risks() {
