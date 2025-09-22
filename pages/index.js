@@ -1,3 +1,4 @@
+import Header from "../../components/Header"; // adjust path per file
 import Head from 'next/head';
 import Link from 'next/link';
 
