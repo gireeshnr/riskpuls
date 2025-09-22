@@ -1,19 +1,13 @@
 import clientPromise from '../../../lib/mongo';
 import { calculateScore } from './data';
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../lib/auth';
 
-/**
- * API route for the collection of risks.
- * - GET: returns an array of risks
- * - POST: creates a new risk
- * Requires a valid session.
- */
 export default async function handler(req, res) {
-  // Require auth
+  // Require a signed-in session (middleware also protects, but we enforce here too)
   const session = await getServerSession(req, res, authOptions);
   if (!session) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
   try {
@@ -22,25 +16,50 @@ export default async function handler(req, res) {
     const collection = db.collection('risks');
 
     if (req.method === 'GET') {
+      // Optional: light cache for list reads
+      res.setHeader('Cache-Control', 'no-store');
+
       const docs = await collection.find({}).toArray();
       const risks = docs.map(({ _id, ...rest }) => ({
         id: _id.toString(),
         ...rest,
       }));
-      return res.status(200).json(risks);
+
+      return res.status(200).json(risks); // return array directly
     }
 
     if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const { title, description, likelihood, impact, status = 'open', frameworks = [] } = body || {};
+      // Accept JSON or stringified JSON
+      let body = req.body;
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch {
+          return res.status(400).json({ message: 'Invalid JSON payload' });
+        }
+      }
 
+      const {
+        title,
+        description,
+        likelihood,
+        impact,
+        status = 'open',
+        frameworks = [],
+      } = body || {};
+
+      // Basic validation
       if (!title || !description || likelihood === undefined || impact === undefined) {
         return res.status(400).json({ message: 'Missing required fields' });
-        }
+      }
 
       const L = Number(likelihood);
       const I = Number(impact);
+      if (Number.isNaN(L) || Number.isNaN(I)) {
+        return res.status(400).json({ message: 'likelihood/impact must be numbers' });
+      }
 
+      const now = new Date().toISOString();
       const newRisk = {
         title,
         description,
@@ -49,10 +68,9 @@ export default async function handler(req, res) {
         risk_score: calculateScore(L, I),
         status,
         frameworks,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        // org_id: TODO in next step (multi-tenant)
-        // created_by: session.user?.email || null,
+        created_at: now,
+        updated_at: now,
+        // TODO (next phase): org_id from session, created_by, etc.
       };
 
       const result = await collection.insertOne(newRisk);
@@ -62,7 +80,7 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['GET', 'POST']);
     return res.status(405).json({ message: `Method ${req.method} not allowed` });
   } catch (err) {
-    console.error("Risks API error:", err);
+    console.error('Risks API error:', err);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }
